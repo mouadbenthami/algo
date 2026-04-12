@@ -1,0 +1,9 @@
+Algorithme hello
+Variables
+    message : Chaine
+DEBUT
+    message <- "Bonjour le monde"
+    Ecrire("enter votre nom")
+    Lire(message)
+    Ecrire(message)
+Fin
