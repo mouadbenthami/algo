@@ -31,6 +31,7 @@ class TokenType(enum.Enum):
 
     # Keywords
     ALGORITHME = "ALGORITHME"
+    CONSTANTES = "CONSTANTES"
     VARIABLES = "VARIABLES"
     DEBUT = "DEBUT"
     FIN = "FIN"
@@ -49,8 +50,6 @@ class TokenType(enum.Enum):
     FINTANTQUE = "FINTANTQUE"
     POUR = "POUR"
     ALLANT = "ALLANT"
-    DE = "DE"
-    A = "A"
     FINPOUR = "FINPOUR"
     LIRE = "LIRE"
     ECRIRE = "ECRIRE"
@@ -62,6 +61,7 @@ class TokenType(enum.Enum):
 
 KEYWORDS = {
     "ALGORITHME": TokenType.ALGORITHME,
+    "CONSTANTES": TokenType.CONSTANTES,
     "VARIABLES": TokenType.VARIABLES,
     "DEBUT": TokenType.DEBUT,
     "FIN": TokenType.FIN,
@@ -80,8 +80,6 @@ KEYWORDS = {
     "FINTANTQUE": TokenType.FINTANTQUE,
     "POUR": TokenType.POUR,
     "ALLANT": TokenType.ALLANT,
-    "DE": TokenType.DE,
-    "A": TokenType.A,
     "FINPOUR": TokenType.FINPOUR,
     "LIRE": TokenType.LIRE,
     "ECRIRE": TokenType.ECRIRE,

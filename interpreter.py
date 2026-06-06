@@ -4,29 +4,47 @@ from parser import (Program, VarDecl, Binary, Unary, Literal, Variable,
 
 class InterpreterError(Exception):
     def __init__(self, token, message):
+        self.token = token
         self.message = message
-        line = token.line
-        source = token.source_line
+        line = token.line if token else "?"
+        source = token.source_line if token else "?"
         super().__init__(f"[Ligne {line}] Erreur : {message} | Code : {source.strip()}")
+
+class NeedsInputException(Exception):
+    def __init__(self, line):
+        self.line = line
+        super().__init__("Attente d'entrée utilisateur")
 
 class Environment:
     def __init__(self):
         self.values = {}
         self.types = {}
         self.is_array = {}
+        self.is_constant = {}
 
-    def define(self, name, type_token, is_array=False, array_size=None):
+    def define(self, name, type_token, is_array=False, array_size=None, is_constant=False):
         clean_name = name.upper()
         if clean_name in self.values:
-            raise Exception(f"Variable '{name}' déjà déclarée.") # Should be handled with Token for proper error
+            raise Exception(f"Variable ou constante '{name}' déjà déclarée.")
             
         self.types[clean_name] = type_token.type
         self.is_array[clean_name] = is_array
+        self.is_constant[clean_name] = is_constant
         
         if is_array:
             self.values[clean_name] = [None] * array_size
         else:
             self.values[clean_name] = None
+
+    def define_constant(self, name, value_token, value):
+        clean_name = name.upper()
+        if clean_name in self.values:
+            raise Exception(f"Variable ou constante '{name}' déjà déclarée.")
+            
+        self.types[clean_name] = value_token.type
+        self.is_array[clean_name] = False
+        self.is_constant[clean_name] = True
+        self.values[clean_name] = value
 
     def get(self, name_token):
         clean_name = name_token.lexeme.upper()
@@ -60,6 +78,9 @@ class Environment:
         if clean_name not in self.values:
             raise InterpreterError(name_token, f"La variable '{name_token.lexeme}' n'a pas été déclarée dans la section Variables.")
         
+        if self.is_constant.get(clean_name, False):
+            raise InterpreterError(name_token, f"Impossible de modifier la constante '{name_token.lexeme}'.")
+            
         if self.is_array[clean_name]:
             raise InterpreterError(name_token, f"Vous devez spécifier un indice pour affecter une valeur au tableau '{name_token.lexeme}'.")
             
@@ -89,19 +110,22 @@ class Environment:
             TokenType.REEL: "Réelle",
             TokenType.CHAINE: "Chaîne",
             TokenType.CARACTERE: "Caractère",
-            TokenType.BOOLEEN: "Booléenne"
+            TokenType.BOOLEEN: "Booléenne",
+            TokenType.NUMBER_INT: "Entière",
+            TokenType.NUMBER_REAL: "Réelle",
+            TokenType.STRING: "Chaîne"
         }
         
         actual = type(value)
         expected_str = TYPE_NAMES.get(expected_type, str(expected_type))
         
-        if expected_type == TokenType.ENTIER:
+        if expected_type in (TokenType.ENTIER, TokenType.NUMBER_INT):
             if actual is not int or isinstance(value, bool):
                 raise InterpreterError(token, f"Erreur de type : Vous ne pouvez pas affecter ce type à une variable {expected_str}.")
-        elif expected_type == TokenType.REEL:
+        elif expected_type in (TokenType.REEL, TokenType.NUMBER_REAL):
             if (actual is not float and actual is not int) or isinstance(value, bool):
                  raise InterpreterError(token, f"Erreur de type : Vous ne pouvez pas affecter ce type à une variable {expected_str}.")
-        elif expected_type == TokenType.CHAINE:
+        elif expected_type in (TokenType.CHAINE, TokenType.STRING):
             if actual is not str:
                  raise InterpreterError(token, f"Erreur de type : Vous ne pouvez pas affecter ce type à une variable {expected_str}.")
         elif expected_type == TokenType.CARACTERE:
@@ -112,27 +136,75 @@ class Environment:
                  raise InterpreterError(token, f"Erreur de type : Vous ne pouvez pas affecter ce type à une variable {expected_str}.")
 
 class Interpreter:
-    def __init__(self, trace_mode=False):
+    def __init__(self, trace_mode=False, inputs=None):
         self.env = Environment()
         self.trace_mode = trace_mode
+        self.inputs = inputs if inputs is not None else []
+        self.snapshots = []
+        self.output = []
+
+    def capture_snapshot(self, line, action):
+        variables = {}
+        tableaux = {}
+        constantes = {}
+        types = {}
+        
+        for name, value in self.env.values.items():
+            # Get type string
+            types[name] = self.env.types[name].name
+            if self.env.is_array[name]:
+                tableaux[name] = list(value) if value else []
+            elif self.env.is_constant.get(name, False):
+                constantes[name] = value
+            else:
+                variables[name] = value
+                
+        self.snapshots.append({
+            "ligne_actuelle": line,
+            "variables": variables,
+            "tableaux": tableaux,
+            "constantes": constantes,
+            "types": types,
+            "sortie": "\n".join(self.output),
+            "action": action
+        })
 
     def interpret(self, program: Program):
         try:
+            for const_decl in program.constants:
+                try:
+                    self.env.define_constant(const_decl.name_token.lexeme, const_decl.value_token, const_decl.value_token.literal)
+                except Exception as e:
+                    raise InterpreterError(const_decl.name_token, str(e))
+
             for decl in program.declarations:
                 try:
                     self.env.define(decl.name_token.lexeme, decl.type_token, decl.is_array, decl.array_size)
                 except Exception as e:
                     raise InterpreterError(decl.name_token, str(e))
+            
+            if program.constants or program.declarations:
+                first_line = program.constants[0].name_token.line if program.constants else program.declarations[0].name_token.line
+                self.capture_snapshot(first_line, "Initialisation de la mémoire")
                     
             for stmt in program.statements:
                 self.execute(stmt)
                 
+            self.capture_snapshot(None, "Fin de l'exécution")
+            return {"status": "success", "snapshots": self.snapshots, "erreurs": None}
+            
+        except NeedsInputException as e:
+            self.capture_snapshot(e.line, "Attente d'une saisie utilisateur...")
+            return {"status": "needs_input", "snapshots": self.snapshots, "erreurs": None}
         except InterpreterError as e:
-            print(e)
+            self.capture_snapshot(e.token.line if e.token else None, f"Erreur : {e.message}")
+            return {"status": "error", "snapshots": self.snapshots, "erreurs": str(e)}
         except Exception as e:
-            print(f"Erreur d'exécution inattendue : {e}")
+            self.capture_snapshot(None, f"Erreur inattendue : {e}")
+            return {"status": "error", "snapshots": self.snapshots, "erreurs": f"Erreur inattendue : {e}"}
 
     def print_trace(self):
+        # On garde cette méthode si besoin pour le mode CLI classique
         if not self.trace_mode: return
         print("\n--- TRACE : État de la Mémoire ---")
         for name, value in self.env.values.items():
@@ -153,17 +225,23 @@ class Interpreter:
                 if type(index) is not int:
                     raise InterpreterError(stmt.name_token, "L'indice du tableau doit être un entier.")
                 self.env.assign_array_element(stmt.name_token, index, value)
+                self.capture_snapshot(stmt.line, f"Affectation de {value} à {stmt.name_token.lexeme}[{index}]")
             else:
                 self.env.assign(stmt.name_token, value)
+                self.capture_snapshot(stmt.line, f"Affectation de {value} à {stmt.name_token.lexeme}")
             self.print_trace()
             
         elif isinstance(stmt, Print):
             results = [str(self.evaluate(expr)) for expr in stmt.expressions]
-            print(" ".join(results))
+            texte = " ".join(results)
+            self.output.append(texte)
+            self.capture_snapshot(stmt.line, f"Affichage : {texte}")
             self.print_trace()
             
         elif isinstance(stmt, Read):
-            user_input = input()
+            if not self.inputs:
+                raise NeedsInputException(stmt.line)
+            user_input = self.inputs.pop(0)
             
             target_type = self.env.types[stmt.name_token.lexeme.upper()]
             try:
@@ -183,8 +261,10 @@ class Interpreter:
                 if type(index) is not int:
                     raise InterpreterError(stmt.name_token, "L'indice du tableau doit être un entier.")
                 self.env.assign_array_element(stmt.name_token, index, value)
+                self.capture_snapshot(stmt.line, f"Lecture de {value} dans {stmt.name_token.lexeme}[{index}]")
             else:
                 self.env.assign(stmt.name_token, value)
+                self.capture_snapshot(stmt.line, f"Lecture de {value} dans {stmt.name_token.lexeme}")
             self.print_trace()
             
         elif isinstance(stmt, If):
@@ -192,6 +272,8 @@ class Interpreter:
             if type(condition_val) is not bool:
                  raise InterpreterError(stmt.condition.left.name_token if hasattr(stmt.condition, 'left') and hasattr(stmt.condition.left, 'name_token') else None, "La condition du 'Si' doit être une expression Booléenne.")
                  
+            self.capture_snapshot(stmt.line, f"Évaluation de la condition Si : {'Vraie' if condition_val else 'Fausse'}")
+            
             if condition_val:
                 for s in stmt.then_branch: self.execute(s)
             else:
@@ -202,7 +284,10 @@ class Interpreter:
                 condition_val = self.evaluate(stmt.condition)
                 if type(condition_val) is not bool:
                     raise InterpreterError(None, "La condition du 'TantQue' doit être une expression Booléenne.")
+                
+                self.capture_snapshot(stmt.line, f"Évaluation TantQue : {'Vraie' if condition_val else 'Fausse (Fin de la boucle)'}")
                 if not condition_val: break
+                
                 for s in stmt.body: self.execute(s)
                 
         elif isinstance(stmt, For):
@@ -212,6 +297,7 @@ class Interpreter:
                 
             self.env.assign(stmt.var_token, start_val)
             self.print_trace()
+            self.capture_snapshot(stmt.line, f"Boucle Pour : initialisation de {stmt.var_token.lexeme} à {start_val}")
             
             while True:
                 current_val = self.env.get(stmt.var_token)
@@ -220,7 +306,10 @@ class Interpreter:
                     raise InterpreterError(stmt.var_token, "La borne de fin de la boucle 'Pour' doit être un Entier.")
                     
                 if current_val > end_val:
+                    self.capture_snapshot(stmt.line, f"Boucle Pour : fin (dépassé la borne {end_val})")
                     break
+                else:
+                    self.capture_snapshot(stmt.line, f"Boucle Pour : itération pour {stmt.var_token.lexeme} = {current_val}")
                     
                 for s in stmt.body: self.execute(s)
                 

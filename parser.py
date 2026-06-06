@@ -1,13 +1,19 @@
-from lexer import TokenType, Token
+from lexer import TokenType, Token, remove_accents
 
 class ASTNode:
     pass
 
 class Program(ASTNode):
-    def __init__(self, name, declarations, statements):
+    def __init__(self, name, constants, declarations, statements):
         self.name = name
+        self.constants = constants
         self.declarations = declarations
         self.statements = statements
+
+class ConstDecl(ASTNode):
+    def __init__(self, name_token, value_token):
+        self.name_token = name_token
+        self.value_token = value_token
 
 class VarDecl(ASTNode):
     def __init__(self, name_token, type_token, is_array=False, array_size=None):
@@ -48,33 +54,39 @@ class Stmt(ASTNode):
     pass
 
 class Assign(Stmt):
-    def __init__(self, name_token, index_expr, value):
+    def __init__(self, line, name_token, index_expr, value):
+        self.line = line
         self.name_token = name_token
         self.index_expr = index_expr
         self.value = value
 
 class Print(Stmt):
-    def __init__(self, expressions):
+    def __init__(self, line, expressions):
+        self.line = line
         self.expressions = expressions
 
 class Read(Stmt):
-    def __init__(self, name_token, index_expr=None):
+    def __init__(self, line, name_token, index_expr=None):
+        self.line = line
         self.name_token = name_token
         self.index_expr = index_expr
 
 class If(Stmt):
-    def __init__(self, condition, then_branch, else_branch):
+    def __init__(self, line, condition, then_branch, else_branch):
+        self.line = line
         self.condition = condition
         self.then_branch = then_branch
         self.else_branch = else_branch
 
 class While(Stmt):
-    def __init__(self, condition, body):
+    def __init__(self, line, condition, body):
+        self.line = line
         self.condition = condition
         self.body = body
 
 class For(Stmt):
-    def __init__(self, var_token, start_expr, end_expr, body):
+    def __init__(self, line, var_token, start_expr, end_expr, body):
+        self.line = line
         self.var_token = var_token
         self.start_expr = start_expr
         self.end_expr = end_expr
@@ -94,11 +106,7 @@ class Parser:
         self.current = 0
 
     def parse(self):
-        try:
-            return self.program()
-        except ParserError as e:
-            print(e)
-            return None
+        return self.program()
 
     def peek(self):
         return self.tokens[self.current]
@@ -126,14 +134,34 @@ class Parser:
         return False
 
     def consume(self, type_, message):
+        print(type_)
         if self.check(type_):
             return self.advance()
         raise ParserError(self.peek(), message)
+
+    def consume_identifier_keyword(self, expected_lexeme, message):
+        token = self.peek()
+        if token.type == TokenType.IDENTIFIER and remove_accents(token.lexeme).upper() == expected_lexeme.upper():
+            return self.advance()
+        raise ParserError(token, message)
+
+    def const_decl(self):
+        name_token = self.consume(TokenType.IDENTIFIER, "Nom de constante attendu.")
+        self.consume(TokenType.EQUAL, "'=' attendu après le nom de la constante.")
+        if self.match(TokenType.BOOLEEN, TokenType.NUMBER_INT, TokenType.NUMBER_REAL, TokenType.STRING):
+            value_token = self.previous()
+            return ConstDecl(name_token, value_token)
+        raise ParserError(self.peek(), "Valeur de constante attendue (Entier, Réel, Chaîne, Booléen).")
 
     def program(self):
         self.consume(TokenType.ALGORITHME, "Mot-clé 'Algorithme' attendu au début.")
         name_token = self.consume(TokenType.IDENTIFIER, "Nom de l'algorithme attendu.")
         
+        constants = []
+        if self.match(TokenType.CONSTANTES):
+            while not self.check(TokenType.VARIABLES) and not self.check(TokenType.DEBUT) and not self.is_at_end():
+                constants.append(self.const_decl())
+
         declarations = []
         if self.match(TokenType.VARIABLES):
             while not self.check(TokenType.DEBUT) and not self.is_at_end():
@@ -147,7 +175,7 @@ class Parser:
             
         self.consume(TokenType.FIN, "Mot-clé 'Fin' attendu à la fin de l'algorithme.")
         
-        return Program(name_token.lexeme, declarations, statements)
+        return Program(name_token.lexeme, constants, declarations, statements)
 
     def var_decl(self):
         decls = []
@@ -188,6 +216,7 @@ class Parser:
         raise ParserError(self.peek(), "Instruction non reconnue.")
 
     def print_stmt(self):
+        line = self.previous().line
         self.consume(TokenType.LPAREN, "'(' attendu après 'Ecrire'.")
         expressions = []
         if not self.check(TokenType.RPAREN):
@@ -195,9 +224,10 @@ class Parser:
             while self.match(TokenType.COMMA):
                 expressions.append(self.expression())
         self.consume(TokenType.RPAREN, "')' attendu à la fin de 'Ecrire'.")
-        return Print(expressions)
+        return Print(line, expressions)
 
     def read_stmt(self):
+        line = self.previous().line
         self.consume(TokenType.LPAREN, "'(' attendu après 'Lire'.")
         name_token = self.consume(TokenType.IDENTIFIER, "Nom de variable attendu dans 'Lire'.")
         index_expr = None
@@ -205,10 +235,11 @@ class Parser:
             index_expr = self.expression()
             self.consume(TokenType.RBRACKET, "']' attendu.")
         self.consume(TokenType.RPAREN, "')' attendu à la fin de 'Lire'.")
-        return Read(name_token, index_expr)
+        return Read(line, name_token, index_expr)
 
     def assign_stmt(self):
         name_token = self.advance() # we checked it's IDENTIFIER
+        line = name_token.line
         index_expr = None
         if self.match(TokenType.LBRACKET):
             index_expr = self.expression()
@@ -218,9 +249,10 @@ class Parser:
             raise ParserError(self.peek(), "Opérateur d'affectation '<-' ou '=' attendu.")
             
         value = self.expression()
-        return Assign(name_token, index_expr, value)
+        return Assign(line, name_token, index_expr, value)
 
     def if_stmt(self):
+        line = self.previous().line
         condition = self.expression()
         self.consume(TokenType.ALORS, "Mot-clé 'Alors' attendu après la condition du 'Si'.")
         
@@ -234,9 +266,10 @@ class Parser:
                 else_branch.append(self.statement())
                 
         self.consume(TokenType.FINSI, "Mot-clé 'FinSi' manquant pour le 'Si'.")
-        return If(condition, then_branch, else_branch)
+        return If(line, condition, then_branch, else_branch)
 
     def while_stmt(self):
+        line = self.previous().line
         condition = self.expression()
         self.consume(TokenType.FAIRE, "Mot-clé 'Faire' attendu après la condition du 'TantQue'.")
         
@@ -245,14 +278,15 @@ class Parser:
             body.append(self.statement())
             
         self.consume(TokenType.FINTANTQUE, "Mot-clé 'FinTantQue' manquant pour le 'TantQue'.")
-        return While(condition, body)
+        return While(line, condition, body)
 
     def for_stmt(self):
+        line = self.previous().line
         var_token = self.consume(TokenType.IDENTIFIER, "Nom de variable attendu après 'Pour'.")
         self.consume(TokenType.ALLANT, "'Allant' attendu.")
-        self.consume(TokenType.DE, "'de' attendu.")
+        self.consume_identifier_keyword("DE", "'de' attendu.")
         start_expr = self.expression()
-        self.consume(TokenType.A, "'à' attendu.")
+        self.consume_identifier_keyword("A", "'à' attendu.")
         end_expr = self.expression()
         self.consume(TokenType.FAIRE, "'Faire' attendu.")
         
@@ -261,7 +295,7 @@ class Parser:
             body.append(self.statement())
             
         self.consume(TokenType.FINPOUR, "Mot-clé 'FinPour' manquant pour le 'Pour'.")
-        return For(var_token, start_expr, end_expr, body)
+        return For(line, var_token, start_expr, end_expr, body)
 
     def expression(self):
         return self.logic_or()
