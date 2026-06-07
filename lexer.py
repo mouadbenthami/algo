@@ -57,6 +57,14 @@ class TokenType(enum.Enum):
     OU = "OU"
     NON = "NON"
 
+    # Cas (switch) keywords
+    CAS = "CAS"
+    VAUT = "VAUT"
+    AUTRE = "AUTRE"
+    FINCAS = "FINCAS"
+
+    SEMICOLON = "SEMICOLON"
+
     EOF = "EOF"
 
 KEYWORDS = {
@@ -87,7 +95,11 @@ KEYWORDS = {
     "OU": TokenType.OU,
     "NON": TokenType.NON,
     "VRAI": TokenType.BOOLEEN,
-    "FAUX": TokenType.BOOLEEN
+    "FAUX": TokenType.BOOLEEN,
+    "CAS": TokenType.CAS,
+    "VAUT": TokenType.VAUT,
+    "AUTRE": TokenType.AUTRE,
+    "FINCAS": TokenType.FINCAS
 }
 
 def remove_accents(input_str):
@@ -171,6 +183,7 @@ class Lexer:
         elif c == ']': self.add_token(TokenType.RBRACKET)
         elif c == ',': self.add_token(TokenType.COMMA)
         elif c == ':': self.add_token(TokenType.COLON)
+        elif c == ';': self.add_token(TokenType.SEMICOLON)
         elif c == '-':
             self.add_token(TokenType.MINUS)
         elif c == '+': self.add_token(TokenType.PLUS)

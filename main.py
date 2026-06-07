@@ -34,26 +34,26 @@ if __name__ == "__main__":
     
     CODE_EXEMPLE = """Algorithme TestComplet
 Variables
-    T[5] : Entier
+    Tableau T[5] : Entier
     i, max : Entier
 Début
-    Ecrire("Initialisation du tableau avec quelques valeurs...")
+    Ecrire("Initialisation du tableau avec quelques valeurs...");
     Pour i Allant de 0 A 4 Faire
-        T[i] <- i * 10
+        T[i] <- i * 10;
     FinPour
 
-    T[2] <- 85
-    T[4] <- 12
+    T[2] <- 85;
+    T[4] <- 12;
 
-    max <- 0
-    Ecrire("Recherche du maximum...")
+    max <- 0;
+    Ecrire("Recherche du maximum...");
     Pour i Allant de 0 A 4 Faire
         Si T[i] > max Alors
-            max <- T[i]
+            max <- T[i];
         FinSi
     FinPour
 
-    Ecrire("Le maximum est :", max)
+    Ecrire("Le maximum est :", max);
 Fin
 """
 

@@ -1,0 +1,26 @@
+Algorithme ExempleComplet
+Constantes
+    Pi = 3.14;
+Variables
+    x, y : Booleen;
+    t, b : Entier;
+Debut
+    t <- 4 + 5 * 3 - 1;
+    x <- Vrai;
+    y <- Faux;
+
+    Si x Et Non y Alors
+        Ecrire("OK");
+    Sinon
+        Ecrire("not OK");
+    FinSi
+
+    Lire(b);
+    b <- 5;
+    Cas (b) Vaut
+        1: b <- 10;
+        2: b <- 20;
+        3: b <- 30;
+        Autre: b <- 0;
+    FinCas
+Fin

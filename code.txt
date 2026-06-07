@@ -1,9 +1,18 @@
-Algorithme hello
+Algorithme Demo
 Variables
-    message : Chaine
-DEBUT
-    message <- "Bonjour le monde"
-    Ecrire("enter votre nom")
-    Lire(message)
-    Ecrire(message)
+    a, b, r : Entier
+Debut
+    a <- 10;
+    b <- 5;
+    r <- a * b + 2;
+    Si r > 50 Alors
+        Ecrire("Grand");
+    Sinon
+        Ecrire("Petit");
+    FinSi
+    Cas (a) Vaut
+        10: r <- 999;
+        Autre: r <- 0;
+    FinCas
+    Ecrire(r);
 Fin

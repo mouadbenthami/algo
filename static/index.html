@@ -2,120 +2,102 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Visualiseur Algorithmique Marocain</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Visualiseur Algorithmique</title>
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
     <header class="app-header">
         <h1>Visualiseur Algo</h1>
         <div class="controls">
-            <button id="btn-theme-toggle" class="btn outline" style="margin-right: 0.5rem;">🌓 Mode Sombre</button>
+            <button id="btn-theme-toggle" class="btn outline">Clair</button>
             <button id="btn-run" class="btn primary">Démarrer</button>
-            <button id="btn-edit" class="btn secondary hidden">Modifier le code</button>
+            <button id="btn-edit" class="btn secondary hidden">Modifier</button>
         </div>
     </header>
 
     <div class="mobile-tabs">
         <button class="tab-btn active" data-target="code-pane">Code</button>
         <button class="tab-btn" data-target="memory-pane">Mémoire</button>
+        <button class="tab-btn" data-target="viz-pane">Schéma</button>
         <button class="tab-btn" data-target="console-pane">Console</button>
-        <button class="tab-btn" data-target="quiz-pane">Quiz</button>
     </div>
 
     <main class="app-container">
-        <!-- PANE: CODE -->
+
+        <!-- CODE PANE -->
         <section id="code-pane" class="pane active">
-            <div class="pane-header" style="display: flex; justify-content: space-between; align-items: center;">
-                <h2>Code Source</h2>
-                <div>
-                    <label for="file-import" class="btn outline" style="font-size: 0.8rem; padding: 4px 8px; cursor: pointer; display: inline-block;">
-                        Importer 📂
-                    </label>
-                    <input type="file" id="file-import" accept=".txt" style="display: none;">
-                </div>
-            </div>
-            
+            <div class="pane-header"><h2>Code Source</h2></div>
             <div id="editor-container" class="scrollable">
                 <textarea id="code-input" spellcheck="false" placeholder="Algorithme MonAlgo
 Variables
     x : Entier
-Début
-    x <- 10
+Debut
+    x <- 10;
 Fin"></textarea>
             </div>
-            
             <div id="visualizer-container" class="scrollable hidden">
                 <div id="code-lines"></div>
             </div>
-
             <div id="stepper-controls" class="hidden">
                 <div id="action-desc">En attente...</div>
                 <div class="stepper-buttons">
-                    <button id="btn-reset" class="btn secondary">Réinitialiser 🔄</button>
+                    <button id="btn-reset" class="btn secondary">Réinitialiser</button>
                     <button id="btn-prev" class="btn outline" disabled>Précédent</button>
-                    <button id="btn-next" class="btn primary">Suivant ></button>
+                    <button id="btn-next" class="btn primary">Suivant</button>
                 </div>
             </div>
         </section>
 
         <div class="right-panes">
-            <div class="desktop-tabs-bar">
-                <button class="desktop-tab-btn active" id="tab-simulation">Machine & Exécution</button>
-                <button class="desktop-tab-btn" id="tab-quiz">Quiz d'Évaluation</button>
-            </div>
-            
-            <!-- PANE: MEMORY -->
+
+            <!-- MEMORY -->
             <section id="memory-pane" class="pane">
-                <div class="pane-header">
-                    <h2>État de la mémoire</h2>
-                </div>
+                <div class="pane-header"><h2>Mémoire</h2></div>
                 <div class="scrollable padding-pane">
-                    <!-- Pedagogical Bubble -->
-                    <div id="pedagogical-bubble" class="pedagogical-bubble">
-                        <span class="bubble-icon">💡</span>
-                        <div class="bubble-content">
-                            <span class="bubble-title">Bulle Pédagogique</span>
-                            <span id="bubble-text">Bienvenue ! Appuyez sur "Démarrer" pour simuler l'algorithme étape par étape.</span>
-                        </div>
-                    </div>
-
-                    <!-- CPU Container -->
-                    <div id="cpu-container" class="cpu-container hidden">
-                        <div class="cpu-title">Calculateur CPU / Processeur</div>
-                        <div class="cpu-display">
-                            <div class="cpu-gears">
-                                <div class="gear gear-1">⚙️</div>
-                                <div class="gear gear-2">⚙️</div>
-                            </div>
-                            <div id="cpu-expr" class="cpu-expr">a + b</div>
-                            <div id="cpu-div-extra" class="cpu-div-extra hidden">Rejet décimal .xx 🗑️</div>
-                        </div>
-                    </div>
-                    
-                    <h3>Constantes & Variables (Étagère de Mémoire)</h3>
                     <div id="variables-grid" class="variables-grid">
-                        <div class="empty-state">Aucune variable ou constante</div>
-                    </div>
-
-                    <h3 class="mt-4">Tableaux</h3>
-                    <div id="arrays-container" class="arrays-container">
-                        <div class="empty-state">Aucun tableau</div>
+                        <div class="empty-state">Aucune variable</div>
                     </div>
                 </div>
             </section>
 
-            <!-- PANE: CONSOLE -->
-            <section id="console-pane" class="pane">
-                <div class="pane-header">
-                    <h2>Console d'exécution</h2>
+            <!-- VISUALIZATION -->
+            <section id="viz-pane" class="pane hidden">
+                <div class="pane-header"><h2>Schéma d'exécution</h2></div>
+                <div id="viz-content" class="scrollable padding-pane">
+
+                    <div id="viz-arithmetic" class="viz-section hidden">
+                        <h3>Calcul pas à pas</h3>
+                        <div id="arithmetic-viz" class="flowchart-viz"></div>
+                    </div>
+
+                    <div id="viz-logical" class="viz-section hidden">
+                        <h3>Évaluation logique</h3>
+                        <div id="logical-viz" class="flowchart-viz"></div>
+                    </div>
+
+                    <div id="viz-si" class="viz-section hidden">
+                        <h3>Décision Si</h3>
+                        <div id="si-viz" class="flowchart-viz"></div>
+                    </div>
+
+                    <div id="viz-cas" class="viz-section hidden">
+                        <h3>Sélecteur Cas</h3>
+                        <div id="cas-viz" class="flowchart-viz"></div>
+                    </div>
+
+                    <div id="viz-empty" class="empty-state">Lancez l'algorithme pour voir le schéma d'exécution</div>
                 </div>
+            </section>
+
+            <!-- CONSOLE -->
+            <section id="console-pane" class="pane">
+                <div class="pane-header"><h2>Console</h2></div>
                 <div class="scrollable padding-pane terminal">
                     <pre id="console-output"></pre>
-                    
                     <div id="input-container" class="hidden">
-                        <label for="console-input">Entrée requise :</label>
+                        <label for="console-input">Entrée :</label>
                         <div class="input-row">
                             <input type="text" id="console-input" autocomplete="off">
                             <button id="btn-submit-input" class="btn primary">Valider</button>
@@ -124,85 +106,17 @@ Fin"></textarea>
                 </div>
             </section>
 
-            <!-- PANE: QUIZ -->
-            <section id="quiz-pane" class="pane hidden">
-                <div class="pane-header">
-                    <h2>Quiz d'Évaluation</h2>
-                </div>
-                <div class="scrollable padding-pane">
-                    <div id="quiz-welcome" class="quiz-welcome-card" style="background: var(--bg-secondary); border: 1px solid var(--bg-tertiary); padding: 2rem; border-radius: 12px; text-align: center;">
-                        <h3>Prêt à évaluer vos connaissances ?</h3>
-                        <p style="color: var(--text-muted); margin-top: 0.5rem;">Ce test contient des questions sur l'algorithmique, les constantes, les variables et les types de données du Tronc Commun.</p>
-                        <button id="btn-start-quiz" class="btn primary" style="margin-top: 1.5rem;">Commencer le Quiz</button>
-                    </div>
-
-                    <div id="quiz-question-container" class="hidden">
-                        <div class="quiz-progress-bar" style="width: 100%; height: 6px; background-color: var(--bg-tertiary); border-radius: 3px; overflow: hidden; margin-bottom: 1rem;">
-                            <div id="quiz-progress-fill" style="width: 0%; height: 100%; background-color: var(--accent); transition: width 0.3s;"></div>
-                        </div>
-                        <div class="quiz-meta" style="display: flex; justify-content: space-between; margin: 1rem 0; font-size: 0.85rem;">
-                            <span id="quiz-question-number" style="color: var(--text-muted);">Question 1/9</span>
-                            <span id="quiz-question-category" class="category-badge" style="background-color: var(--bg-tertiary); padding: 2px 8px; border-radius: 12px; font-weight: bold;">Variables</span>
-                        </div>
-                        <div id="quiz-question-text" class="quiz-question-text" style="font-size: 1.1rem; font-weight: 500; margin-bottom: 1.5rem;">Question text here?</div>
-                        
-                        <div id="quiz-options-list" class="quiz-options-list" style="display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.5rem;">
-                            <!-- Options will be rendered dynamically -->
-                        </div>
-                        
-                        <div class="quiz-actions" style="display: flex; gap: 0.5rem;">
-                            <button id="btn-quiz-submit" class="btn primary" disabled>Valider la réponse</button>
-                            <button id="btn-quiz-next" class="btn outline hidden">Question Suivante</button>
-                        </div>
-                        <div id="quiz-feedback" class="quiz-feedback-box hidden" style="margin-top: 1rem; padding: 1rem; border-radius: 8px; font-size: 0.9rem; border: 1.5px solid transparent;"></div>
-                    </div>
-
-                    <div id="quiz-results" class="hidden">
-                        <div class="quiz-results-card" style="text-align: center; background: var(--bg-secondary); border: 1px solid var(--bg-tertiary); padding: 2rem; border-radius: 12px;">
-                            <h3>Résultats du Quiz</h3>
-                            <div class="quiz-score-circle" style="font-size: 3rem; font-weight: bold; color: var(--accent); margin: 1.5rem 0;">
-                                <span id="quiz-score-num">0</span>/9
-                            </div>
-                            <p id="quiz-score-grade" style="font-weight: 600; font-size: 1.2rem; margin-bottom: 2rem;">Félicitations !</p>
-                            
-                            <div class="quiz-stats-breakdown" style="text-align: left; max-width: 300px; margin: 0 auto; display: flex; flex-direction: column; gap: 0.75rem;">
-                                <h4 style="font-size: 0.9rem; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.5rem;">Détails par compétences :</h4>
-                                <div class="stat-row" style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 0.4rem;">
-                                    <span>Notion d'Algorithme</span>
-                                    <span id="stat-algo" class="stat-badge" style="font-weight: bold;">0/2</span>
-                                </div>
-                                <div class="stat-row" style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 0.4rem;">
-                                    <span>Constantes</span>
-                                    <span id="stat-const" class="stat-badge" style="font-weight: bold;">0/2</span>
-                                </div>
-                                <div class="stat-row" style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 0.4rem;">
-                                    <span>Variables</span>
-                                    <span id="stat-var" class="stat-badge" style="font-weight: bold;">0/2</span>
-                                </div>
-                                <div class="stat-row" style="display: flex; justify-content: space-between; padding-bottom: 0.4rem;">
-                                    <span>Types de Données</span>
-                                    <span id="stat-types" class="stat-badge" style="font-weight: bold;">0/3</span>
-                                </div>
-                            </div>
-                            
-                            <button id="btn-quiz-restart" class="btn primary" style="margin-top: 2rem;">Recommencer le Quiz</button>
-                        </div>
-                    </div>
-                </div>
-            </section>
         </div>
     </main>
 
-    <!-- Error Modal overlay -->
     <div id="error-overlay" class="hidden">
         <div class="error-modal">
-            <h3>Erreur d'exécution</h3>
+            <h3>Erreur</h3>
             <p id="error-message"></p>
             <button id="btn-close-error" class="btn">Fermer</button>
         </div>
     </div>
 
-    <div id="animation-overlay"></div>
     <script src="script.js"></script>
 </body>
 </html>

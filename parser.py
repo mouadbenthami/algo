@@ -92,6 +92,13 @@ class For(Stmt):
         self.end_expr = end_expr
         self.body = body
 
+class Cas(Stmt):
+    def __init__(self, line, expression, cases, else_statement):
+        self.line = line
+        self.expression = expression
+        self.cases = cases  # list of (value_literal, Stmt)
+        self.else_statement = else_statement  # Stmt or None
+
 class ParserError(Exception):
     def __init__(self, token, message):
         self.token = token
@@ -134,10 +141,15 @@ class Parser:
         return False
 
     def consume(self, type_, message):
-        print(type_)
         if self.check(type_):
             return self.advance()
         raise ParserError(self.peek(), message)
+
+    def get_line_text(self, line):
+        for tok in self.tokens:
+            if tok.line == line:
+                return tok.source_line
+        return ""
 
     def consume_identifier_keyword(self, expected_lexeme, message):
         token = self.peek()
@@ -150,6 +162,7 @@ class Parser:
         self.consume(TokenType.EQUAL, "'=' attendu après le nom de la constante.")
         if self.match(TokenType.BOOLEEN, TokenType.NUMBER_INT, TokenType.NUMBER_REAL, TokenType.STRING):
             value_token = self.previous()
+            self.consume_semicolon(name_token.line)
             return ConstDecl(name_token, value_token)
         raise ParserError(self.peek(), "Valeur de constante attendue (Entier, Réel, Chaîne, Booléen).")
 
@@ -187,15 +200,18 @@ class Parser:
             self.consume(TokenType.COLON, "':' attendu après la définition du tableau.")
             type_token = self.type_specifier()
             decls.append(VarDecl(name_token, type_token, is_array=True, array_size=size_token.literal))
+            line = name_token.line
         else:
             names = []
             names.append(self.consume(TokenType.IDENTIFIER, "Nom de variable attendu."))
+            line = names[0].line
             while self.match(TokenType.COMMA):
                 names.append(self.consume(TokenType.IDENTIFIER, "Nom de variable attendu après ','."))
             self.consume(TokenType.COLON, "':' attendu après les noms de variables.")
             type_token = self.type_specifier()
             for name in names:
                 decls.append(VarDecl(name, type_token))
+        self.consume_semicolon(line)
         return decls
 
     def type_specifier(self):
@@ -209,6 +225,7 @@ class Parser:
         if self.match(TokenType.SI): return self.if_stmt()
         if self.match(TokenType.TANTQUE): return self.while_stmt()
         if self.match(TokenType.POUR): return self.for_stmt()
+        if self.match(TokenType.CAS): return self.cas_stmt()
         
         if self.check(TokenType.IDENTIFIER):
             return self.assign_stmt()
@@ -224,6 +241,7 @@ class Parser:
             while self.match(TokenType.COMMA):
                 expressions.append(self.expression())
         self.consume(TokenType.RPAREN, "')' attendu à la fin de 'Ecrire'.")
+        self.consume_semicolon(line)
         return Print(line, expressions)
 
     def read_stmt(self):
@@ -235,6 +253,7 @@ class Parser:
             index_expr = self.expression()
             self.consume(TokenType.RBRACKET, "']' attendu.")
         self.consume(TokenType.RPAREN, "')' attendu à la fin de 'Lire'.")
+        self.consume_semicolon(line)
         return Read(line, name_token, index_expr)
 
     def assign_stmt(self):
@@ -249,6 +268,7 @@ class Parser:
             raise ParserError(self.peek(), "Opérateur d'affectation '<-' ou '=' attendu.")
             
         value = self.expression()
+        self.consume_semicolon(line)
         return Assign(line, name_token, index_expr, value)
 
     def if_stmt(self):
@@ -296,6 +316,34 @@ class Parser:
             
         self.consume(TokenType.FINPOUR, "Mot-clé 'FinPour' manquant pour le 'Pour'.")
         return For(line, var_token, start_expr, end_expr, body)
+
+    def cas_stmt(self):
+        line = self.previous().line
+        self.consume(TokenType.LPAREN, "'(' attendu après 'Cas'.")
+        expr = self.expression()
+        self.consume(TokenType.RPAREN, "')' attendu après l'expression du 'Cas'.")
+        self.consume(TokenType.VAUT, "Mot-clé 'Vaut' attendu.")
+        
+        cases = []
+        else_stmt = None
+        
+        while not self.check(TokenType.FINCAS) and not self.check(TokenType.AUTRE) and not self.is_at_end():
+            value_token = self.consume(TokenType.NUMBER_INT, "Valeur entière attendue pour le cas.")
+            self.consume(TokenType.COLON, "':' attendu après la valeur du cas.")
+            stmt = self.statement()
+            cases.append((value_token.literal, stmt))
+        
+        if self.match(TokenType.AUTRE):
+            self.consume(TokenType.COLON, "':' attendu après 'Autre'.")
+            else_stmt = self.statement()
+            
+        self.consume(TokenType.FINCAS, "Mot-clé 'FinCas' attendu.")
+        return Cas(line, expr, cases, else_stmt)
+
+    def consume_semicolon(self, line):
+        if not self.match(TokenType.SEMICOLON):
+            token = Token(TokenType.SEMICOLON, ";", None, line, self.get_line_text(line))
+            raise ParserError(token, f"Point-virgule ';' attendu à la fin de l'instruction ligne {line}.")
 
     def expression(self):
         return self.logic_or()

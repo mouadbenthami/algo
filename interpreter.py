@@ -1,6 +1,6 @@
 from lexer import TokenType
 from parser import (Program, VarDecl, Binary, Unary, Literal, Variable, 
-                    ArrayAccess, Assign, Print, Read, If, While, For)
+                    ArrayAccess, Assign, Print, Read, If, While, For, Cas)
 
 class InterpreterError(Exception):
     def __init__(self, token, message):
@@ -142,15 +142,20 @@ class Interpreter:
         self.inputs = inputs if inputs is not None else []
         self.snapshots = []
         self.output = []
+        self.block_stack = []  # tracks active block types for viz lifetime
+        self._viz_seq_counter = 0
 
-    def capture_snapshot(self, line, action):
+    def _next_viz_seq(self):
+        self._viz_seq_counter += 1
+        return self._viz_seq_counter
+
+    def capture_snapshot(self, line, action, extra_data=None):
         variables = {}
         tableaux = {}
         constantes = {}
         types = {}
         
         for name, value in self.env.values.items():
-            # Get type string
             types[name] = self.env.types[name].name
             if self.env.is_array[name]:
                 tableaux[name] = list(value) if value else []
@@ -158,8 +163,8 @@ class Interpreter:
                 constantes[name] = value
             else:
                 variables[name] = value
-                
-        self.snapshots.append({
+        
+        snap = {
             "ligne_actuelle": line,
             "variables": variables,
             "tableaux": tableaux,
@@ -167,7 +172,15 @@ class Interpreter:
             "types": types,
             "sortie": "\n".join(self.output),
             "action": action
-        })
+        }
+        
+        if extra_data:
+            snap.update(extra_data)
+        
+        if self.block_stack:
+            snap["block_active"] = list(self.block_stack)
+                
+        self.snapshots.append(snap)
 
     def interpret(self, program: Program):
         try:
@@ -217,18 +230,192 @@ class Interpreter:
             print(f"{name} ({type_str}{' []' if is_arr else ''}) = {val_str}")
         print("----------------------------------\n")
 
+    def evaluate_with_steps(self, expr):
+        """Evaluate expression and return (result, steps) for pedagogical display"""
+        steps = []
+        result = self._evaluate_steps(expr, steps)
+        return result, steps
+
+    def _evaluate_steps(self, expr, steps):
+        if isinstance(expr, Literal):
+            return expr.value
+        if isinstance(expr, Variable):
+            return self.env.get(expr.name_token)
+        if isinstance(expr, ArrayAccess):
+            index = self._evaluate_steps(expr.index_expr, steps)
+            if type(index) is not int:
+                raise InterpreterError(expr.name_token, "L'indice du tableau doit être un Entier.")
+            return self.env.get_array_element(expr.name_token, index)
+        if isinstance(expr, Unary):
+            right = self._evaluate_steps(expr.right, steps)
+            if expr.op.type == TokenType.MINUS:
+                result = -right
+            elif expr.op.type == TokenType.NON:
+                result = not right
+            elif expr.op.type == TokenType.PLUS:
+                result = right
+            steps.append({
+                "operation": f"{expr.op.lexeme}{right}",
+                "result": result
+            })
+            return result
+        if isinstance(expr, Binary):
+            left = self._evaluate_steps(expr.left, steps)
+            right = self._evaluate_steps(expr.right, steps)
+            op = expr.op.lexeme
+            result = self._apply_op(expr.op, left, right)
+            steps.append({
+                "operation": f"{left} {op} {right}",
+                "result": result
+            })
+            return result
+        return self.evaluate(expr)
+
+    def _apply_op(self, op_token, left, right):
+        op_type = op_token.type
+        if op_type in (TokenType.PLUS, TokenType.MINUS, TokenType.STAR, TokenType.SLASH, TokenType.GT, TokenType.GTE, TokenType.LT, TokenType.LTE):
+            if op_type == TokenType.PLUS and isinstance(left, str) and isinstance(right, str):
+                return left + right
+            if op_type == TokenType.PLUS: return left + right
+            if op_type == TokenType.MINUS: return left - right
+            if op_type == TokenType.STAR: return left * right
+            if op_type == TokenType.SLASH:
+                if right == 0: raise InterpreterError(op_token, "Division par zéro.")
+                if type(left) is int and type(right) is int: return left // right
+                return left / right
+            if op_type == TokenType.GT: return left > right
+            if op_type == TokenType.GTE: return left >= right
+            if op_type == TokenType.LT: return left < right
+            if op_type == TokenType.LTE: return left <= right
+        if op_type == TokenType.EQUAL: return left == right
+        if op_type == TokenType.NEQ: return left != right
+        if op_type == TokenType.ET: return left and right
+        if op_type == TokenType.OU: return left or right
+        return None
+
+    def explain_condition(self, expr):
+        """Return structured data about a condition for visualization"""
+        if isinstance(expr, Binary):
+            left_val = self.evaluate(expr.left)
+            right_val = self.evaluate(expr.right)
+            left_text = self._expr_text(expr.left)
+            right_text = self._expr_text(expr.right)
+            return {
+                "expression": f"{left_text} {expr.op.lexeme} {right_text}",
+                "parts": [
+                    {"text": left_text, "value": left_val},
+                    {"text": expr.op.lexeme},
+                    {"text": right_text, "value": right_val}
+                ]
+            }
+        if isinstance(expr, Unary):
+            right_val = self.evaluate(expr.right)
+            right_text = self._expr_text(expr.right)
+            spacer = " " if expr.op.type == TokenType.NON else ""
+            return {
+                "expression": f"{expr.op.lexeme}{spacer}{right_text}",
+                "parts": [{"text": expr.op.lexeme}, {"text": right_text, "value": right_val}]
+            }
+        val = self.evaluate(expr)
+        text = self._expr_text(expr)
+        return {
+            "expression": text,
+            "parts": [{"text": text, "value": val}]
+        }
+
+    def _expr_text(self, expr):
+        """Get a text representation of an expression"""
+        if isinstance(expr, Literal): return str(expr.value)
+        if isinstance(expr, Variable): return expr.name_token.lexeme
+        if isinstance(expr, Binary): return f"{self._expr_text(expr.left)} {expr.op.lexeme} {self._expr_text(expr.right)}"
+        if isinstance(expr, Unary):
+            spacer = " " if expr.op.type == TokenType.NON else ""
+            return f"{expr.op.lexeme}{spacer}{self._expr_text(expr.right)}"
+        if isinstance(expr, ArrayAccess): return f"{expr.name_token.lexeme}[{self._expr_text(expr.index_expr)}]"
+        return "?"
+
+    def explain_logical(self, expr):
+        """Return step-by-step logical evaluation"""
+        steps = []
+        if isinstance(expr, Binary) and expr.op.type in (TokenType.ET, TokenType.OU):
+            left_val = self.evaluate(expr.left)
+            if isinstance(expr.left, Binary) and expr.left.op.type in (TokenType.GT, TokenType.GTE, TokenType.LT, TokenType.LTE, TokenType.EQUAL, TokenType.NEQ):
+                left_info = self.explain_condition(expr.left)
+                steps.append({"expression": left_info["expression"], "result": "Vrai" if left_val else "Faux"})
+            else:
+                steps.append({"expression": self._expr_text(expr.left), "result": "Vrai" if left_val else "Faux"})
+            
+            right_val = self.evaluate(expr.right)
+            if isinstance(expr.right, Binary) and expr.right.op.type in (TokenType.GT, TokenType.GTE, TokenType.LT, TokenType.LTE, TokenType.EQUAL, TokenType.NEQ):
+                right_info = self.explain_condition(expr.right)
+                steps.append({"expression": right_info["expression"], "result": "Vrai" if right_val else "Faux"})
+            else:
+                steps.append({"expression": self._expr_text(expr.right), "result": "Vrai" if right_val else "Faux"})
+            
+            result = self._apply_op(expr.op, left_val, right_val)
+            steps.append({
+                "expression": f"{'Vrai' if left_val else 'Faux'} {expr.op.lexeme} {'Vrai' if right_val else 'Faux'}",
+                "result": "Vrai" if result else "Faux"
+            })
+        return steps if steps else None
+
     def execute(self, stmt):
         if isinstance(stmt, Assign):
-            value = self.evaluate(stmt.value)
+            is_arithmetic = isinstance(stmt.value, Binary) and stmt.value.op.type in (TokenType.PLUS, TokenType.MINUS, TokenType.STAR, TokenType.SLASH)
+            is_logical = isinstance(stmt.value, Binary) and stmt.value.op.type in (TokenType.ET, TokenType.OU)
+
+            extra = {}
+            value = None
+
+            if is_arithmetic:
+                value, steps = self.evaluate_with_steps(stmt.value)
+                if steps:
+                    viz_seq = self._next_viz_seq()
+                    for i, step in enumerate(steps):
+                        self.capture_snapshot(stmt.line, f"Calcul : {step['operation']} = {step['result']}", {
+                            "viz_type": "arithmetic", "viz_seq": viz_seq,
+                            "viz_step": i, "viz_total": len(steps),
+                            "viz_steps": steps, "viz_final": False
+                        })
+                    extra = {
+                        "viz_type": "arithmetic", "viz_seq": viz_seq,
+                        "viz_step": len(steps), "viz_total": len(steps),
+                        "viz_steps": steps, "viz_final": True,
+                        "arithmetic_final": f"{stmt.name_token.lexeme} = {value}"
+                    }
+
+            elif is_logical:
+                steps = self.explain_logical(stmt.value)
+                value = self.evaluate(stmt.value)
+                if steps:
+                    viz_seq = self._next_viz_seq()
+                    for i, step in enumerate(steps):
+                        self.capture_snapshot(stmt.line, f"Calcul : {step['expression']} -> {step['result']}", {
+                            "viz_type": "logical", "viz_seq": viz_seq,
+                            "viz_step": i, "viz_total": len(steps),
+                            "viz_steps": steps, "viz_final": False
+                        })
+                    extra = {
+                        "viz_type": "logical", "viz_seq": viz_seq,
+                        "viz_step": len(steps), "viz_total": len(steps),
+                        "viz_steps": steps, "viz_final": True
+                    }
+
+            else:
+                value = self.evaluate(stmt.value)
+
+            if value is None and not extra:
+                value = self.evaluate(stmt.value)
+
             if stmt.index_expr:
                 index = self.evaluate(stmt.index_expr)
                 if type(index) is not int:
                     raise InterpreterError(stmt.name_token, "L'indice du tableau doit être un entier.")
                 self.env.assign_array_element(stmt.name_token, index, value)
-                self.capture_snapshot(stmt.line, f"Affectation de {value} à {stmt.name_token.lexeme}[{index}]")
+                self.capture_snapshot(stmt.line, f"Affectation de {value} à {stmt.name_token.lexeme}[{index}]", extra)
             else:
                 self.env.assign(stmt.name_token, value)
-                self.capture_snapshot(stmt.line, f"Affectation de {value} à {stmt.name_token.lexeme}")
+                self.capture_snapshot(stmt.line, f"Affectation de {value} à {stmt.name_token.lexeme}", extra)
             self.print_trace()
             
         elif isinstance(stmt, Print):
@@ -271,13 +458,37 @@ class Interpreter:
             condition_val = self.evaluate(stmt.condition)
             if type(condition_val) is not bool:
                  raise InterpreterError(stmt.condition.left.name_token if hasattr(stmt.condition, 'left') and hasattr(stmt.condition.left, 'name_token') else None, "La condition du 'Si' doit être une expression Booléenne.")
-                 
-            self.capture_snapshot(stmt.line, f"Évaluation de la condition Si : {'Vraie' if condition_val else 'Fausse'}")
+            
+            cond_info = self.explain_condition(stmt.condition)
+            logical_steps = None
+            if isinstance(stmt.condition, Binary) and stmt.condition.op.type in (TokenType.ET, TokenType.OU):
+                logical_steps = self.explain_logical(stmt.condition)
+            
+            self.block_stack.append("si")
+            
+            # Phase 1: Show condition expression (no result yet)
+            phase1 = {}
+            if cond_info:
+                phase1["condition"] = {k: v for k, v in cond_info.items() if k != "result"}
+            if logical_steps:
+                phase1["logical_steps"] = logical_steps
+            self.capture_snapshot(stmt.line, "Évaluation de la condition...", phase1)
+            
+            # Phase 2: Show result with branch selection
+            extra = {}
+            if cond_info:
+                cond_info["result"] = condition_val
+                extra["condition"] = cond_info
+                extra["branch"] = "Oui" if condition_val else "Non"
+            if logical_steps:
+                extra["logical_steps"] = logical_steps
+            self.capture_snapshot(stmt.line, f"Condition : {'Vraie' if condition_val else 'Fausse'} -> branche '{'Oui' if condition_val else 'Non'}", extra)
             
             if condition_val:
                 for s in stmt.then_branch: self.execute(s)
             else:
                 for s in stmt.else_branch: self.execute(s)
+            self.block_stack.pop()
                 
         elif isinstance(stmt, While):
             while True:
@@ -317,6 +528,71 @@ class Interpreter:
                 new_val = self.env.get(stmt.var_token) + 1
                 self.env.assign(stmt.var_token, new_val)
                 self.print_trace()
+                
+        elif isinstance(stmt, Cas):
+            expr_val = self.evaluate(stmt.expression)
+            if type(expr_val) is not int:
+                raise InterpreterError(None, "L'expression du 'Cas' doit être un Entier.")
+            
+            self.block_stack.append("cas")
+            
+            all_cases = [{"value": v, "matched": False} for v, _ in stmt.cases]
+            
+            # Phase 1: Show value being evaluated
+            self.capture_snapshot(stmt.line, "Évaluation de Cas...", {
+                "cas_value": expr_val,
+                "cas_cases": list(all_cases),
+                "cas_else": stmt.else_statement is not None,
+                "cas_step": "evaluating"
+            })
+            
+            matched = False
+            # Phase 2-5: Check each case sequentially
+            for i, (case_val, case_stmt) in enumerate(stmt.cases):
+                # Show checking this case
+                checked = []
+                for j in range(i):
+                    checked.append(j)
+                self.capture_snapshot(stmt.line, f"Test : {expr_val} == {case_val} ?", {
+                    "cas_value": expr_val,
+                    "cas_cases": list(all_cases),
+                    "cas_else": stmt.else_statement is not None,
+                    "cas_step": "checking",
+                    "cas_current": i,
+                    "cas_checked": checked
+                })
+                
+                if expr_val == case_val:
+                    matched = True
+                    all_cases[i]["matched"] = True
+                    self.capture_snapshot(stmt.line, f"Cas {expr_val} : branche {case_val} sélectionnée", {
+                        "cas_value": expr_val,
+                        "cas_cases": all_cases,
+                        "cas_else": stmt.else_statement is not None,
+                        "cas_step": "matched"
+                    })
+                    self.execute(case_stmt)
+                    break
+            
+            if not matched and stmt.else_statement:
+                self.capture_snapshot(stmt.line, f"Cas {expr_val} : branche Autre sélectionnée", {
+                    "cas_value": expr_val,
+                    "cas_cases": all_cases,
+                    "cas_else": stmt.else_statement is not None,
+                    "cas_step": "matched",
+                    "cas_else_selected": True
+                })
+                self.execute(stmt.else_statement)
+            elif not matched:
+                self.capture_snapshot(stmt.line, f"Cas {expr_val} : aucune branche correspondante", {
+                    "cas_value": expr_val,
+                    "cas_cases": all_cases,
+                    "cas_else": stmt.else_statement is not None,
+                    "cas_step": "matched",
+                    "cas_else_selected": False
+                })
+            
+            self.block_stack.pop()
 
     def evaluate(self, expr):
         if isinstance(expr, Literal):
